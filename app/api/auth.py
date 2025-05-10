@@ -1,5 +1,5 @@
 from fastapi import APIRouter,Depends,HTTPException,status,Security
-from fastapi.security import OAuth2PasswordRequestForm,OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordRequestForm,OAuth2PasswordBearer,HTTPBearer,HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -9,7 +9,8 @@ from app.schemas.user import UserCreate,UserOut,Token
 from app.core.security import hash_password,verify_password,create_access_token,verify_access_token
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+security = HTTPBearer()
 
 print(" AUTH ROUTER LOADED")
 
@@ -51,26 +52,42 @@ async def login(form_data: OAuth2PasswordRequestForm =Depends(), session: AsyncS
     token = create_access_token({"sub": user.email})
     return {"access_token": token, "token_type": "bearer"}
 
-async def get_current_user(token: str = Security(oauth2_scheme),session: AsyncSession = Depends(get_async_session)):
-    print("Received token:", token)
-    if not token:
-        raise HTTPException(status_code=401,detail="token is missing")
-    payload = verify_access_token(token)
-    print("payload",payload)
 
-    if not payload:
-        raise HTTPException(status_code=401,detail="invalid token")
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-    email = payload.get("sub")
-    result = await session.execute(select(User).where(User.email == email))
-    user = result.scalars().first()
+security = HTTPBearer()
 
-    if not user:
-        raise HTTPException(status_code = 404,detail = "user not found")
+async def get_current_user(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        session: AsyncSession = Depends(get_async_session)
+) -> User:
+    token = credentials.credentials
+    print(f"token: {token}")
 
-    return user
+    if token.startswith("Bearer "):
+        token=token[7:].strip()
 
-@router.get("/me", response_model=UserOut, dependencies=[Depends(oauth2_scheme)])
+
+    try:
+        payload = verify_access_token(token)
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=401, detail="Token invalid")
+
+        result = await session.execute(select(User).where(User.email == email))
+        user = result.scalars().first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return user
+
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+@router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 

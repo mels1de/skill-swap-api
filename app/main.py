@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from app.api import auth
 import logging
@@ -13,11 +14,17 @@ app = FastAPI(
     redoc_url=None
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 def custom_openapi():
-    print("custom_openapi called")
-
     if app.openapi_schema:
         return app.openapi_schema
 
@@ -36,13 +43,20 @@ def custom_openapi():
         }
     }
 
-    for path in openapi_schema["paths"].values():
-        for method in path.values():
-            if method.get("operationId") != "login_auth_login_post":
-               method.setdefault("security", [{"BearerAuth": []}])
+    openapi_schema["security"] = [{"BearerAuth": []}]
+
+    if "/auth/me" in openapi_schema["paths"]:
+        openapi_schema["paths"]["/auth/me"]["get"] = {
+            **openapi_schema["paths"]["/auth/me"]["get"],
+            "security": [{"BearerAuth": []}]
+        }
+
+    for path_name, path_item in openapi_schema["paths"].items():
+        for method, operation in path_item.items():
+            if path_name != "/auth/login" and method.lower() != "options":
+                operation.setdefault("security", [{"BearerAuth": []}])
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
-
 
 app.openapi = custom_openapi
