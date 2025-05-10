@@ -79,15 +79,13 @@ curl -X GET http://localhost:8000/auth/me \
 
 ---
 
-Swagger UI (/docs) may not handle tokens correctly. It is recommended to use curl or Postman for testing.
-
 Pydantic validators provide reliable input validation.
 
 Upcoming plans:
 
 Docker containerization
 Alembic migrations
-Swagger UI fixes
+Swagger UI fixes (done)
 
 
 
